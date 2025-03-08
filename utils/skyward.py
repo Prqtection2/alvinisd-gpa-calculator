@@ -13,9 +13,20 @@ import os
 import subprocess
 import traceback
 import logging
+import base64
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def save_screenshot_base64(driver, name):
+    try:
+        # Take screenshot and convert to base64
+        screenshot = driver.get_screenshot_as_base64()
+        logger.info(f"Screenshot {name} (base64): {screenshot}")
+        return screenshot
+    except Exception as e:
+        logger.error(f"Failed to take screenshot {name}: {str(e)}")
+        return None
 
 class SkywardGPA:
     def __init__(self, username, password):
@@ -46,40 +57,49 @@ class SkywardGPA:
                 chrome_binary = os.environ.get('CHROME_BIN', '/usr/bin/google-chrome')
                 logger.info(f"Using Chrome binary: {chrome_binary}")
                 options.binary_location = chrome_binary
-                options.add_argument('--headless=new')
+                
+                # Required arguments for running on Render
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-dev-shm-usage')
+                options.add_argument('--disable-gpu')
+                options.add_argument('--disable-software-rasterizer')
+                options.add_argument('--disable-features=VizDisplayCompositor')
+                options.add_argument('--disable-extensions')
+                options.add_argument('--single-process')
+                options.add_argument('--remote-debugging-port=9222')
+                options.add_argument('--window-size=1920,1080')
+                options.add_argument('--start-maximized')
+                options.add_argument('--disable-setuid-sandbox')
+                options.add_argument('--disable-web-security')
+                options.add_argument('--headless=new')  # Use new headless mode
             else:  # Local
-                options.add_argument('--headless=new')  # Still use headless for testing
+                options.add_argument('--headless=new')
             
             # Common options
-            options.add_argument('--disable-gpu')
-            options.add_argument('--window-size=1920,1080')
-            options.add_argument('--start-maximized')
             options.add_argument('--ignore-certificate-errors')
             options.add_experimental_option('excludeSwitches', ['enable-logging'])
             
             logger.info("Initializing Chrome driver...")
             try:
                 if platform.system() == 'Windows':
-                    # For Windows, use webdriver-manager
                     service = ChromeService(ChromeDriverManager().install())
                 else:
-                    # For Linux/Render, try to find Chrome directly
-                    chrome_version = os.popen('google-chrome --version').read().strip().split()[2]
-                    logger.info(f"Detected Chrome version: {chrome_version}")
-                    service = ChromeService(ChromeDriverManager(version=chrome_version).install())
-                
-                self.driver = webdriver.Chrome(service=service, options=options)
-                logger.info("Chrome driver initialized successfully")
+                    # For Linux/Render, try to use system Chrome
+                    self.driver = webdriver.Chrome(options=options)
+                    logger.info("Chrome driver initialized using system Chrome")
+                    return
             except Exception as e:
                 logger.error(f"Error initializing Chrome driver: {str(e)}")
-                # Fallback to direct Chrome initialization
+                # Fallback to direct initialization
                 logger.info("Attempting fallback Chrome initialization...")
                 self.driver = webdriver.Chrome(options=options)
                 logger.info("Fallback Chrome initialization successful")
 
             self.login()
+            
+            # Take screenshot after login
+            save_screenshot_base64(self.driver, "after_login")
+            
             self.navigate_to_gradebook()
             self.extract_grades()
             self.calculate_gpas()
@@ -94,6 +114,9 @@ class SkywardGPA:
         except Exception as e:
             logger.error(f"Error in calculate: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            # Take screenshot on error
+            if self.driver:
+                save_screenshot_base64(self.driver, "error_state")
             raise
         finally:
             if self.driver:
@@ -162,24 +185,36 @@ class SkywardGPA:
             current_url = self.driver.current_url
             logger.info(f"Current URL: {current_url}")
             
+            # Take screenshot before navigation
+            save_screenshot_base64(self.driver, "before_navigation")
+            
             if len(self.driver.window_handles) > 1:
                 logger.info("Multiple windows detected, switching to new window...")
                 self.driver.switch_to.window(self.driver.window_handles[1])
                 logger.info("Successfully switched to new window")
+                # Take screenshot after window switch
+                save_screenshot_base64(self.driver, "after_window_switch")
             else:
                 logger.info("Single window detected, continuing in current window")
             
             # Wait for page to load
             logger.info("Waiting for page to load...")
-            time.sleep(5)  # Give the page some time to load
+            time.sleep(5)
             
             # Log page source and check for content
             page_source = self.driver.page_source
             logger.info("Page source length: " + str(len(page_source)))
-            if len(page_source) < 1000:  # If page seems empty
-                logger.warning("Page source seems too small, refreshing page...")
-                self.driver.refresh()
-                time.sleep(5)
+            
+            # Log all links on the page
+            links = self.driver.find_elements(By.TAG_NAME, "a")
+            logger.info("Found links on page:")
+            for link in links:
+                try:
+                    href = link.get_attribute("href")
+                    text = link.text
+                    logger.info(f"Link text: '{text}', href: '{href}'")
+                except:
+                    continue
             
             # Try to find any navigation elements to verify page loaded
             logger.info("Verifying page loaded correctly...")

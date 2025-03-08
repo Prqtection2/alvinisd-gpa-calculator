@@ -9,22 +9,31 @@ services:
 
       # Install Chrome and dependencies
       apt-get update
-      apt-get install -y wget gnupg2 xvfb fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcairo2 libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxshmfence1
+      apt-get install -y wget gnupg2 xvfb fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcairo2 libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxshmfence1 x11vnc
       
-      # Install Chrome
+      # Install Chrome directly
       wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-      apt-get install -y ./google-chrome-stable_current_amd64.deb
+      dpkg -i google-chrome-stable_current_amd64.deb || true
+      apt-get install -f -y
       rm google-chrome-stable_current_amd64.deb
       
-      # Print Chrome version for debugging
+      # Verify Chrome installation
+      which google-chrome
       google-chrome --version
       
       # Install Python dependencies
       pip install -r requirements.txt
     startCommand: |
+      # Kill any existing Xvfb
+      pkill Xvfb || true
+      rm -f /tmp/.X99-lock || true
+      
       # Start Xvfb with correct permissions
       Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset >/dev/null 2>&1 &
       export DISPLAY=:99
+      
+      # Start VNC server for debugging (optional)
+      x11vnc -display :99 -N -forever &
       
       # Start the application with increased timeout
       gunicorn app:app --timeout 120 --workers 1 --threads 2
