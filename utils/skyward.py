@@ -43,6 +43,9 @@ class SkywardGPA:
             
             # Set up options based on environment
             if platform.system() == 'Linux':  # Render
+                chrome_binary = os.environ.get('CHROME_BIN', '/usr/bin/google-chrome')
+                logger.info(f"Using Chrome binary: {chrome_binary}")
+                options.binary_location = chrome_binary
                 options.add_argument('--headless=new')
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-dev-shm-usage')
@@ -57,11 +60,25 @@ class SkywardGPA:
             options.add_experimental_option('excludeSwitches', ['enable-logging'])
             
             logger.info("Initializing Chrome driver...")
-            # Always use ChromeDriverManager for consistent behavior
-            service = ChromeService(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=options)
-            logger.info("Chrome driver initialized successfully")
-            
+            try:
+                if platform.system() == 'Windows':
+                    # For Windows, use webdriver-manager
+                    service = ChromeService(ChromeDriverManager().install())
+                else:
+                    # For Linux/Render, try to find Chrome directly
+                    chrome_version = os.popen('google-chrome --version').read().strip().split()[2]
+                    logger.info(f"Detected Chrome version: {chrome_version}")
+                    service = ChromeService(ChromeDriverManager(version=chrome_version).install())
+                
+                self.driver = webdriver.Chrome(service=service, options=options)
+                logger.info("Chrome driver initialized successfully")
+            except Exception as e:
+                logger.error(f"Error initializing Chrome driver: {str(e)}")
+                # Fallback to direct Chrome initialization
+                logger.info("Attempting fallback Chrome initialization...")
+                self.driver = webdriver.Chrome(options=options)
+                logger.info("Fallback Chrome initialization successful")
+
             self.login()
             self.navigate_to_gradebook()
             self.extract_grades()
