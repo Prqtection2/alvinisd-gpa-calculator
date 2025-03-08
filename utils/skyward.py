@@ -129,7 +129,7 @@ class SkywardGPA:
             password_input.send_keys(self.password)
 
             sign_in_button = self.driver.find_element(By.XPATH, '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[7]/td/a')
-            sign_in_button.click()
+    sign_in_button.click()
 
             try:
                 WebDriverWait(self.driver, 10).until(lambda d: len(d.window_handles) > 1)
@@ -168,33 +168,61 @@ class SkywardGPA:
             
             logger.info("Looking for gradebook button...")
             gradebook_found = False
-            max_attempts = 2  # Reduced attempts
+            max_attempts = 2
             
             for attempt in range(max_attempts):
                 try:
                     logger.info(f"Attempt {attempt + 1} to find gradebook button")
                     
-                    # Try direct XPath first
+                    # First try direct access to gradebook (expanded menu)
                     try:
-                        gradebook_button = WebDriverWait(self.driver, 15).until(
+                        logger.info("Trying expanded menu layout...")
+                        gradebook_button = WebDriverWait(self.driver, 10).until(
                             EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'))
                         )
                         gradebook_button.click()
                         gradebook_found = True
+                        logger.info("Found and clicked gradebook in expanded menu")
                         break
-                    except:
-                        logger.warning("Direct XPath failed, trying alternative methods")
-                    
-                    # Try link text as fallback
+                    except Exception as e:
+                        logger.info(f"Expanded menu attempt failed: {str(e)}")
+                        
+                    # If direct access fails, try the collapsed menu approach
                     try:
-                        gradebook_button = WebDriverWait(self.driver, 15).until(
+                        logger.info("Trying collapsed menu layout...")
+                        # Click the + button first
+                        plus_button = WebDriverWait(self.driver, 10).until(
+                            EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[1]/li/a'))
+                        )
+                        plus_button.click()
+                        logger.info("Clicked + button successfully")
+                        
+                        # Wait a moment for the menu to expand
+                        time.sleep(1)
+                        
+                        # Now try to click the gradebook button
+                        gradebook_button = WebDriverWait(self.driver, 10).until(
+                            EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'))
+                        )
+                        gradebook_button.click()
+                        gradebook_found = True
+                        logger.info("Found and clicked gradebook in collapsed menu")
+                        break
+                    except Exception as e:
+                        logger.info(f"Collapsed menu attempt failed: {str(e)}")
+                        
+                    # If both methods fail, try link text as last resort
+                    try:
+                        logger.info("Trying link text method...")
+                        gradebook_button = WebDriverWait(self.driver, 10).until(
                             EC.element_to_be_clickable((By.LINK_TEXT, "Gradebook"))
                         )
                         gradebook_button.click()
                         gradebook_found = True
+                        logger.info("Found and clicked gradebook using link text")
                         break
-                    except:
-                        logger.warning("Link text method failed")
+                    except Exception as e:
+                        logger.info(f"Link text attempt failed: {str(e)}")
                         
                 except Exception as attempt_error:
                     logger.warning(f"Attempt {attempt + 1} failed: {str(attempt_error)}")
@@ -210,7 +238,7 @@ class SkywardGPA:
             
             logger.info("Waiting for gradebook to load...")
             try:
-                WebDriverWait(self.driver, 30).until(  # Reduced timeout
+                WebDriverWait(self.driver, 30).until(
                     EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'))
                 )
                 logger.info("Gradebook loaded successfully")
@@ -227,21 +255,21 @@ class SkywardGPA:
         try:
             logger.info("Starting grade extraction...")
             logger.info("Finding grading periods...")
-            grading_periods_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'
+    grading_periods_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'
             grading_periods = self.driver.find_elements(By.XPATH, grading_periods_xpath)
             logger.info(f"Found {len(grading_periods)} grading periods")
     
-            period_labels = []
-            for period in grading_periods:
-                try:
-                    label = period.get_attribute('innerText')
-                    if label:
-                        period_labels.append(label)
-                    else:
-                        period_labels.append('-')
+    period_labels = []
+    for period in grading_periods:
+        try:
+            label = period.get_attribute('innerText')
+            if label:
+                period_labels.append(label)
+            else:
+                period_labels.append('-')
                 except Exception as e:
                     logger.error(f"Error getting period label: {str(e)}")
-                    period_labels.append('-')
+            period_labels.append('-')
 
             logger.info(f"Period labels: {period_labels}")
 
@@ -250,34 +278,34 @@ class SkywardGPA:
             logger.info(f"Ordered periods: {self.ordered_periods}")
 
             logger.info("Finding classes container...")
-            classes_container_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
+    classes_container_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
             classes_container = self.driver.find_element(By.XPATH, classes_container_xpath)
-            class_rows = classes_container.find_elements(By.XPATH, './tr')
+    class_rows = classes_container.find_elements(By.XPATH, './tr')
             logger.info(f"Found {len(class_rows)} class rows")
 
             for class_index, class_row in enumerate(class_rows, 1):
-                try:
+        try:
                     logger.info(f"Processing class {class_index}/{len(class_rows)}")
-                    class_name_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody/tr[{class_index}]/td/div/table/tbody/tr[1]/td[2]/span/a'
+            class_name_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody/tr[{class_index}]/td/div/table/tbody/tr[1]/td[2]/span/a'
                     class_name = self.driver.find_element(By.XPATH, class_name_xpath).text
                     logger.info(f"Processing class: {class_name}")
             
-                    class_grades = {}
-                    is_valid_class = True
+            class_grades = {}
+            is_valid_class = True
 
-                    row_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody/tr[{class_index}]'
+            row_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody/tr[{class_index}]'
                     cells = self.driver.find_elements(By.XPATH, f'{row_xpath}/td')
                     logger.info(f"Found {len(cells)} grade cells for {class_name}")
 
-                    for cell_index, cell in enumerate(cells):
-                        try:
-                            text = cell.get_attribute('innerText')
+            for cell_index, cell in enumerate(cells):
+                try:
+                    text = cell.get_attribute('innerText')
                             if text and text.replace('.', '').isnumeric():
-                                if cell_index < len(period_labels):
-                                    class_grades[period_labels[cell_index]] = float(text)
+                            if cell_index < len(period_labels):
+                                class_grades[period_labels[cell_index]] = float(text)
                             elif text:
-                                is_valid_class = False
-                                break
+                            is_valid_class = False
+                            break
                         except Exception as e:
                             logger.error(f"Error processing grade cell {cell_index} for {class_name}: {str(e)}")
                             continue
@@ -305,37 +333,37 @@ class SkywardGPA:
 
     def calculate_gpas(self):
         for period in self.ordered_periods:
-            total_gpa = 0
-            num_classes = 0
-            
+        total_gpa = 0
+        num_classes = 0
+        
             for class_name, class_grades in self.grades.items():
-                if period in class_grades:
-                    grade = class_grades[period]
-                    gpa = 6.0 - (100 - grade) * 0.1
-                    total_gpa += gpa
-                    num_classes += 1
-            
-            if num_classes > 0:
+            if period in class_grades:
+                grade = class_grades[period]
+                gpa = 6.0 - (100 - grade) * 0.1
+                total_gpa += gpa
+                num_classes += 1
+        
+        if num_classes > 0:
                 self.period_gpas[period] = total_gpa / num_classes
 
         for period in self.ordered_periods:
-            total_gpa = 0
-            num_classes = 0
-            
+        total_gpa = 0
+        num_classes = 0
+        
             for class_name, class_grades in self.grades.items():
-                if period in class_grades:
-                    grade = class_grades[period]
-                    
+            if period in class_grades:
+                grade = class_grades[period]
+                
                     if "APA" in class_name:
-                        base_gpa = 7.0
-                    elif "AP" in class_name:
-                        base_gpa = 8.0
-                    else:
-                        base_gpa = 6.0
-                    
-                    weighted_gpa = base_gpa - (100 - grade) * 0.1
-                    total_gpa += weighted_gpa
-                    num_classes += 1
-            
-            if num_classes > 0:
+                    base_gpa = 7.0
+                elif "AP" in class_name:
+                    base_gpa = 8.0
+                else:
+                    base_gpa = 6.0
+                
+                weighted_gpa = base_gpa - (100 - grade) * 0.1
+                total_gpa += weighted_gpa
+                num_classes += 1
+        
+        if num_classes > 0:
                 self.weighted_period_gpas[period] = total_gpa / num_classes
