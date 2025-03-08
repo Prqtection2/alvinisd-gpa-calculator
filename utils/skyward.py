@@ -42,10 +42,10 @@ class SkywardGPA:
                             '3U1', '3U2', 'NW3', '4U1', '4U2', 'NW4', 'EX2', 'SM2', 'YR']
         self.ordered_periods = []
         
-        # Only start Xvfb on Linux (Render)
-        if platform.system() == 'Linux' and not os.environ.get('DISPLAY'):
-            subprocess.Popen(['Xvfb', ':99', '-screen', '0', '1024x768x24'])
+        # X server should already be running from render.yaml
+        if not os.environ.get('DISPLAY'):
             os.environ['DISPLAY'] = ':99'
+            logger.info("Set DISPLAY=:99")
 
     def calculate(self):
         try:
@@ -54,7 +54,7 @@ class SkywardGPA:
             
             # Set up options based on environment
             if platform.system() == 'Linux':  # Render
-                chrome_binary = os.environ.get('CHROME_BIN', '/usr/bin/google-chrome')
+                chrome_binary = '/usr/bin/google-chrome'
                 logger.info(f"Using Chrome binary: {chrome_binary}")
                 options.binary_location = chrome_binary
                 
@@ -62,16 +62,11 @@ class SkywardGPA:
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-dev-shm-usage')
                 options.add_argument('--disable-gpu')
-                options.add_argument('--disable-software-rasterizer')
-                options.add_argument('--disable-features=VizDisplayCompositor')
+                options.add_argument('--headless=new')
                 options.add_argument('--disable-extensions')
-                options.add_argument('--single-process')
                 options.add_argument('--remote-debugging-port=9222')
                 options.add_argument('--window-size=1920,1080')
-                options.add_argument('--start-maximized')
                 options.add_argument('--disable-setuid-sandbox')
-                options.add_argument('--disable-web-security')
-                options.add_argument('--headless=new')  # Use new headless mode
             else:  # Local
                 options.add_argument('--headless=new')
             
@@ -81,19 +76,11 @@ class SkywardGPA:
             
             logger.info("Initializing Chrome driver...")
             try:
-                if platform.system() == 'Windows':
-                    service = ChromeService(ChromeDriverManager().install())
-                else:
-                    # For Linux/Render, try to use system Chrome
-                    self.driver = webdriver.Chrome(options=options)
-                    logger.info("Chrome driver initialized using system Chrome")
-                    return
+                self.driver = webdriver.Chrome(options=options)
+                logger.info("Chrome driver initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing Chrome driver: {str(e)}")
-                # Fallback to direct initialization
-                logger.info("Attempting fallback Chrome initialization...")
-                self.driver = webdriver.Chrome(options=options)
-                logger.info("Fallback Chrome initialization successful")
+                raise
 
             self.login()
             
@@ -152,7 +139,7 @@ class SkywardGPA:
 
             # Click sign-in button
             sign_in_button = self.driver.find_element(By.XPATH, '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[7]/td/a')
-            sign_in_button.click()
+    sign_in_button.click()
 
             # Wait for new window to appear or error message
             try:
@@ -326,23 +313,23 @@ class SkywardGPA:
             logger.info("Starting grade extraction...")
             # Extract grading periods
             logger.info("Finding grading periods...")
-            grading_periods_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'
+    grading_periods_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'
             grading_periods = self.driver.find_elements(By.XPATH, grading_periods_xpath)
             logger.info(f"Found {len(grading_periods)} grading periods")
-            
+    
             # Store period labels
-            period_labels = []
-            for period in grading_periods:
-                try:
-                    label = period.get_attribute('innerText')
-                    if label:
-                        period_labels.append(label)
-                    else:
-                        period_labels.append('-')
+    period_labels = []
+    for period in grading_periods:
+        try:
+            label = period.get_attribute('innerText')
+            if label:
+                period_labels.append(label)
+            else:
+                period_labels.append('-')
                 except Exception as e:
                     logger.error(f"Error getting period label: {str(e)}")
-                    period_labels.append('-')
-            
+            period_labels.append('-')
+
             logger.info(f"Period labels: {period_labels}")
 
             # Filter periods and maintain the correct order
@@ -352,37 +339,37 @@ class SkywardGPA:
 
             # Get classes container
             logger.info("Finding classes container...")
-            classes_container_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
+    classes_container_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
             classes_container = self.driver.find_element(By.XPATH, classes_container_xpath)
-            class_rows = classes_container.find_elements(By.XPATH, './tr')
+    class_rows = classes_container.find_elements(By.XPATH, './tr')
             logger.info(f"Found {len(class_rows)} class rows")
 
             # Extract grades for each class
             for class_index, class_row in enumerate(class_rows, 1):
-                try:
+        try:
                     logger.info(f"Processing class {class_index}/{len(class_rows)}")
                     # Get class name
-                    class_name_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody/tr[{class_index}]/td/div/table/tbody/tr[1]/td[2]/span/a'
+            class_name_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody/tr[{class_index}]/td/div/table/tbody/tr[1]/td[2]/span/a'
                     class_name = self.driver.find_element(By.XPATH, class_name_xpath).text
                     logger.info(f"Processing class: {class_name}")
-                    
+            
                     # Get grades
-                    class_grades = {}
-                    is_valid_class = True
+            class_grades = {}
+            is_valid_class = True
 
-                    row_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody/tr[{class_index}]'
+            row_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody/tr[{class_index}]'
                     cells = self.driver.find_elements(By.XPATH, f'{row_xpath}/td')
                     logger.info(f"Found {len(cells)} grade cells for {class_name}")
 
-                    for cell_index, cell in enumerate(cells):
-                        try:
-                            text = cell.get_attribute('innerText')
+            for cell_index, cell in enumerate(cells):
+                try:
+                    text = cell.get_attribute('innerText')
                             if text and text.replace('.', '').isnumeric():
-                                if cell_index < len(period_labels):
-                                    class_grades[period_labels[cell_index]] = float(text)
+                            if cell_index < len(period_labels):
+                                class_grades[period_labels[cell_index]] = float(text)
                             elif text:  # If non-numeric grade found
-                                is_valid_class = False
-                                break
+                            is_valid_class = False
+                            break
                         except Exception as e:
                             logger.error(f"Error processing grade cell {cell_index} for {class_name}: {str(e)}")
                             continue
@@ -399,10 +386,10 @@ class SkywardGPA:
                     logger.error(f"Error processing class {class_index}: {str(e)}")
                     logger.error(traceback.format_exc())
                     continue
-            
+
             logger.info("Grade extraction completed successfully")
             logger.info(f"Total classes processed: {len(self.grades)}")
-            
+
         except Exception as e:
             logger.error(f"Error in extract_grades: {str(e)}")
             logger.error(traceback.format_exc())
@@ -411,39 +398,39 @@ class SkywardGPA:
     def calculate_gpas(self):
         # Calculate unweighted GPAs
         for period in self.ordered_periods:
-            total_gpa = 0
-            num_classes = 0
-            
+        total_gpa = 0
+        num_classes = 0
+        
             for class_name, class_grades in self.grades.items():
-                if period in class_grades:
-                    grade = class_grades[period]
-                    gpa = 6.0 - (100 - grade) * 0.1
-                    total_gpa += gpa
-                    num_classes += 1
-            
-            if num_classes > 0:
+            if period in class_grades:
+                grade = class_grades[period]
+                gpa = 6.0 - (100 - grade) * 0.1
+                total_gpa += gpa
+                num_classes += 1
+        
+        if num_classes > 0:
                 self.period_gpas[period] = total_gpa / num_classes
 
         # Calculate weighted GPAs
         for period in self.ordered_periods:
-            total_gpa = 0
-            num_classes = 0
-            
+        total_gpa = 0
+        num_classes = 0
+        
             for class_name, class_grades in self.grades.items():
-                if period in class_grades:
-                    grade = class_grades[period]
-                    
+            if period in class_grades:
+                grade = class_grades[period]
+                
                     # Determine base GPA
                     if "APA" in class_name:
-                        base_gpa = 7.0
-                    elif "AP" in class_name:
-                        base_gpa = 8.0
-                    else:
-                        base_gpa = 6.0
-                    
-                    weighted_gpa = base_gpa - (100 - grade) * 0.1
-                    total_gpa += weighted_gpa
-                    num_classes += 1
-            
-            if num_classes > 0:
+                    base_gpa = 7.0
+                elif "AP" in class_name:
+                    base_gpa = 8.0
+                else:
+                    base_gpa = 6.0
+                
+                weighted_gpa = base_gpa - (100 - grade) * 0.1
+                total_gpa += weighted_gpa
+                num_classes += 1
+        
+        if num_classes > 0:
                 self.weighted_period_gpas[period] = total_gpa / num_classes
