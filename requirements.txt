@@ -1,4 +1,5 @@
 Flask==2.3.3
 selenium==4.15.2
 gunicorn==21.2.0
-Werkzeug==2.3.7 
+Werkzeug==2.3.7
+webdriver-manager==4.0.1 
