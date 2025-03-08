@@ -278,6 +278,13 @@ class SkywardGPA:
                 EC.presence_of_element_located((By.XPATH, grades_table_xpath))
             )
             
+            # Get all rows first
+            rows_xpath = f"{grades_table_xpath}/tr"
+            class_rows = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_all_elements_located((By.XPATH, rows_xpath))
+            )
+            logger.info(f"Found {len(class_rows)} rows in grades table")
+            
             # Wait for class names container and get class names
             logger.info("Getting class names...")
             classes_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
@@ -289,17 +296,13 @@ class SkywardGPA:
             self.driver.execute_script("arguments[0].scrollIntoView(true);", classes_container)
             time.sleep(2)  # Allow time for any dynamic content to load
             
+            # Get class names using XPath
+            class_names_xpath = f"{classes_xpath}//td//span/a"
             class_name_elements = WebDriverWait(self.driver, 20).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'td div table tbody tr td span a'))
+                EC.presence_of_all_elements_located((By.XPATH, class_names_xpath))
             )
             class_names = [elem.text for elem in class_name_elements]
             logger.info(f"Found {len(class_names)} classes: {class_names}")
-
-            # Get all rows and ensure they're loaded
-            class_rows = WebDriverWait(self.driver, 20).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, f"{grades_table_xpath} tr"))
-            )
-            logger.info(f"Found {len(class_rows)} rows in grades table")
 
             # Process grades row by row with explicit waits
             for i, (class_row, class_name) in enumerate(zip(class_rows, class_names), 1):
@@ -310,10 +313,8 @@ class SkywardGPA:
                     self.driver.execute_script("arguments[0].scrollIntoView(true);", class_row)
                     time.sleep(0.5)  # Short wait after scrolling
                     
-                    # Get cells with wait
-                    cells = WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_all_elements_located((By.TAG_NAME, 'td'))
-                    )
+                    # Get cells with XPath
+                    cells = class_row.find_elements(By.TAG_NAME, "td")
                     logger.info(f"Found {len(cells)} grade cells for {class_name}")
                     
                     class_grades = {}
