@@ -129,7 +129,7 @@ class SkywardGPA:
             password_input.send_keys(self.password)
 
             sign_in_button = self.driver.find_element(By.XPATH, '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[7]/td/a')
-    sign_in_button.click()
+            sign_in_button.click()
 
             try:
                 WebDriverWait(self.driver, 10).until(lambda d: len(d.window_handles) > 1)
@@ -255,21 +255,21 @@ class SkywardGPA:
         try:
             logger.info("Starting grade extraction...")
             logger.info("Finding grading periods...")
-    grading_periods_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'
+            grading_periods_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'
             grading_periods = self.driver.find_elements(By.XPATH, grading_periods_xpath)
             logger.info(f"Found {len(grading_periods)} grading periods")
     
-    period_labels = []
-    for period in grading_periods:
-        try:
-            label = period.get_attribute('innerText')
-            if label:
-                period_labels.append(label)
-            else:
-                period_labels.append('-')
+            period_labels = []
+            for period in grading_periods:
+                try:
+                    label = period.get_attribute('innerText')
+                    if label:
+                        period_labels.append(label)
+                    else:
+                        period_labels.append('-')
                 except Exception as e:
                     logger.error(f"Error getting period label: {str(e)}")
-            period_labels.append('-')
+                period_labels.append('-')
 
             logger.info(f"Period labels: {period_labels}")
 
@@ -278,45 +278,45 @@ class SkywardGPA:
             logger.info(f"Ordered periods: {self.ordered_periods}")
 
             logger.info("Finding classes container...")
-    classes_container_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
+            classes_container_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
             classes_container = self.driver.find_element(By.XPATH, classes_container_xpath)
-    class_rows = classes_container.find_elements(By.XPATH, './tr')
+            class_rows = classes_container.find_elements(By.XPATH, './tr')
             logger.info(f"Found {len(class_rows)} class rows")
 
             for class_index, class_row in enumerate(class_rows, 1):
-        try:
+                try:
                     logger.info(f"Processing class {class_index}/{len(class_rows)}")
-            class_name_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody/tr[{class_index}]/td/div/table/tbody/tr[1]/td[2]/span/a'
+                    class_name_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody/tr[{class_index}]/td/div/table/tbody/tr[1]/td[2]/span/a'
                     class_name = self.driver.find_element(By.XPATH, class_name_xpath).text
                     logger.info(f"Processing class: {class_name}")
             
-            class_grades = {}
-            is_valid_class = True
+                    class_grades = {}
+                    is_valid_class = True
 
-            row_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody/tr[{class_index}]'
+                    row_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody/tr[{class_index}]'
                     cells = self.driver.find_elements(By.XPATH, f'{row_xpath}/td')
                     logger.info(f"Found {len(cells)} grade cells for {class_name}")
 
-            for cell_index, cell in enumerate(cells):
-                try:
-                    text = cell.get_attribute('innerText')
+                    for cell_index, cell in enumerate(cells):
+                        try:
+                            text = cell.get_attribute('innerText')
                             if text and text.replace('.', '').isnumeric():
-                            if cell_index < len(period_labels):
-                                class_grades[period_labels[cell_index]] = float(text)
-                            elif text:
-                            is_valid_class = False
-                            break
-                        except Exception as e:
-                            logger.error(f"Error processing grade cell {cell_index} for {class_name}: {str(e)}")
-                            continue
+                                if cell_index < len(period_labels):
+                                    class_grades[period_labels[cell_index]] = float(text)
+                                elif text:
+                                    is_valid_class = False
+                                    break
+                            except Exception as e:
+                                logger.error(f"Error processing grade cell {cell_index} for {class_name}: {str(e)}")
+                                continue
 
-                    if is_valid_class and class_grades:
-                        logger.info(f"Adding grades for {class_name}: {class_grades}")
-                        self.grades_raw[class_name] = class_grades
-                        filtered_grades = {period: grade for period, grade in class_grades.items() 
-                                        if 'C' not in period}
-                        if filtered_grades:
-                            self.grades[class_name] = filtered_grades
+                        if is_valid_class and class_grades:
+                            logger.info(f"Adding grades for {class_name}: {class_grades}")
+                            self.grades_raw[class_name] = class_grades
+                            filtered_grades = {period: grade for period, grade in class_grades.items() 
+                                            if 'C' not in period}
+                            if filtered_grades:
+                                self.grades[class_name] = filtered_grades
 
                 except Exception as e:
                     logger.error(f"Error processing class {class_index}: {str(e)}")
@@ -333,37 +333,37 @@ class SkywardGPA:
 
     def calculate_gpas(self):
         for period in self.ordered_periods:
-        total_gpa = 0
-        num_classes = 0
-        
+            total_gpa = 0
+            num_classes = 0
+            
             for class_name, class_grades in self.grades.items():
-            if period in class_grades:
-                grade = class_grades[period]
-                gpa = 6.0 - (100 - grade) * 0.1
-                total_gpa += gpa
-                num_classes += 1
-        
-        if num_classes > 0:
+                if period in class_grades:
+                    grade = class_grades[period]
+                    gpa = 6.0 - (100 - grade) * 0.1
+                    total_gpa += gpa
+                    num_classes += 1
+            
+            if num_classes > 0:
                 self.period_gpas[period] = total_gpa / num_classes
 
         for period in self.ordered_periods:
-        total_gpa = 0
-        num_classes = 0
-        
+            total_gpa = 0
+            num_classes = 0
+            
             for class_name, class_grades in self.grades.items():
-            if period in class_grades:
-                grade = class_grades[period]
-                
+                if period in class_grades:
+                    grade = class_grades[period]
+                    
                     if "APA" in class_name:
-                    base_gpa = 7.0
-                elif "AP" in class_name:
-                    base_gpa = 8.0
-                else:
-                    base_gpa = 6.0
-                
-                weighted_gpa = base_gpa - (100 - grade) * 0.1
-                total_gpa += weighted_gpa
-                num_classes += 1
-        
-        if num_classes > 0:
+                        base_gpa = 7.0
+                    elif "AP" in class_name:
+                        base_gpa = 8.0
+                    else:
+                        base_gpa = 6.0
+                    
+                    weighted_gpa = base_gpa - (100 - grade) * 0.1
+                    total_gpa += weighted_gpa
+                    num_classes += 1
+            
+            if num_classes > 0:
                 self.weighted_period_gpas[period] = total_gpa / num_classes
