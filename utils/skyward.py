@@ -269,7 +269,7 @@ class SkywardGPA:
                         period_labels.append('-')
                 except Exception as e:
                     logger.error(f"Error getting period label: {str(e)}")
-                period_labels.append('-')
+                    period_labels.append('-')
 
             logger.info(f"Period labels: {period_labels}")
 
@@ -281,47 +281,72 @@ class SkywardGPA:
             classes_container_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
             classes_container = self.driver.find_element(By.XPATH, classes_container_xpath)
             class_rows = classes_container.find_elements(By.XPATH, './tr')
-            logger.info(f"Found {len(class_rows)} class rows")
+            total_classes = len(class_rows)
+            logger.info(f"Found {total_classes} class rows")
 
-            for class_index, class_row in enumerate(class_rows, 1):
-                try:
-                    logger.info(f"Processing class {class_index}/{len(class_rows)}")
-                    class_name_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody/tr[{class_index}]/td/div/table/tbody/tr[1]/td[2]/span/a'
-                    class_name = self.driver.find_element(By.XPATH, class_name_xpath).text
-                    logger.info(f"Processing class: {class_name}")
-            
-                    class_grades = {}
-                    is_valid_class = True
-
-                    row_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody/tr[{class_index}]'
-                    cells = self.driver.find_elements(By.XPATH, f'{row_xpath}/td')
-                    logger.info(f"Found {len(cells)} grade cells for {class_name}")
-
-                    for cell_index, cell in enumerate(cells):
+            # Process classes in batches of 20
+            batch_size = 20
+            for batch_start in range(0, total_classes, batch_size):
+                batch_end = min(batch_start + batch_size, total_classes)
+                logger.info(f"Processing batch {batch_start//batch_size + 1} (classes {batch_start + 1} to {batch_end})")
+                
+                for class_index in range(batch_start + 1, batch_end + 1):
+                    try:
+                        logger.info(f"Processing class {class_index}/{total_classes}")
+                        
+                        # Get class name
                         try:
-                            text = cell.get_attribute('innerText')
-                            if text and text.replace('.', '').isnumeric():
-                                if cell_index < len(period_labels):
-                                    class_grades[period_labels[cell_index]] = float(text)
-                                elif text:
-                                    is_valid_class = False
-                                    break
+                            class_name_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody/tr[{class_index}]/td/div/table/tbody/tr[1]/td[2]/span/a'
+                            class_name_element = WebDriverWait(self.driver, 5).until(
+                                EC.presence_of_element_located((By.XPATH, class_name_xpath))
+                            )
+                            class_name = class_name_element.text
+                            logger.info(f"Processing class: {class_name}")
                         except Exception as e:
-                            logger.error(f"Error processing grade cell {cell_index} for {class_name}: {str(e)}")
+                            logger.error(f"Failed to get class name for index {class_index}, skipping: {str(e)}")
+                            continue
+                        
+                        # Get grades
+                        class_grades = {}
+                        is_valid_class = True
+                        
+                        try:
+                            row_xpath = f'/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody/tr[{class_index}]'
+                            cells = WebDriverWait(self.driver, 5).until(
+                                EC.presence_of_all_elements_located((By.XPATH, f'{row_xpath}/td'))
+                            )
+                            
+                            for cell_index, cell in enumerate(cells):
+                                try:
+                                    text = cell.get_attribute('innerText')
+                                    if text and text.replace('.', '').isnumeric():
+                                        if cell_index < len(period_labels):
+                                            class_grades[period_labels[cell_index]] = float(text)
+                                except Exception as e:
+                                    logger.error(f"Error processing grade cell {cell_index} for {class_name}: {str(e)}")
+                                    continue
+                        except Exception as e:
+                            logger.error(f"Failed to get grades for {class_name}: {str(e)}")
                             continue
 
-                    if is_valid_class and class_grades:
-                        logger.info(f"Adding grades for {class_name}: {class_grades}")
-                        self.grades_raw[class_name] = class_grades
-                        filtered_grades = {period: grade for period, grade in class_grades.items() 
-                                        if 'C' not in period}
-                        if filtered_grades:
-                            self.grades[class_name] = filtered_grades
+                        if class_grades:
+                            logger.info(f"Adding grades for {class_name}: {class_grades}")
+                            self.grades_raw[class_name] = class_grades
+                            filtered_grades = {period: grade for period, grade in class_grades.items() 
+                                            if 'C' not in period}
+                            if filtered_grades:
+                                self.grades[class_name] = filtered_grades
 
-                except Exception as e:
-                    logger.error(f"Error processing class {class_index}: {str(e)}")
-                    logger.error(traceback.format_exc())
-                    continue
+                    except Exception as e:
+                        logger.error(f"Error processing class {class_index}: {str(e)}")
+                        logger.error(traceback.format_exc())
+                        continue
+
+                # Clear stale elements after each batch
+                self.driver.execute_script("window.gc();")
+                
+                # Small pause between batches to let memory clear
+                time.sleep(1)
 
             logger.info("Grade extraction completed successfully")
             logger.info(f"Total classes processed: {len(self.grades)}")
