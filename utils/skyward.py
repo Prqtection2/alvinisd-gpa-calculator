@@ -173,59 +173,106 @@ class SkywardGPA:
             logger.info("Waiting for page to load...")
             time.sleep(5)  # Give the page some time to load
             
-            # Log page source for debugging
-            logger.info("Page source length: " + str(len(self.driver.page_source)))
+            # Log page source and check for content
+            page_source = self.driver.page_source
+            logger.info("Page source length: " + str(len(page_source)))
+            if len(page_source) < 1000:  # If page seems empty
+                logger.warning("Page source seems too small, refreshing page...")
+                self.driver.refresh()
+                time.sleep(5)
+            
+            # Try to find any navigation elements to verify page loaded
+            logger.info("Verifying page loaded correctly...")
+            try:
+                nav_elements = self.driver.find_elements(By.TAG_NAME, "a")
+                logger.info(f"Found {len(nav_elements)} navigation elements")
+                if len(nav_elements) == 0:
+                    raise Exception("No navigation elements found")
+            except Exception as e:
+                logger.error(f"Error finding navigation elements: {str(e)}")
+                logger.info("Attempting page refresh...")
+                self.driver.refresh()
+                time.sleep(5)
             
             logger.info("Looking for gradebook button...")
-            # Try different ways to find the gradebook button
-            try:
-                # First try waiting for element to be clickable
-                gradebook_xpath = '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'
-                logger.info("Waiting for gradebook button to be clickable...")
-                gradebook_button = WebDriverWait(self.driver, 20).until(
-                    EC.element_to_be_clickable((By.XPATH, gradebook_xpath))
-                )
-                
-                # Try to scroll the button into view
-                logger.info("Scrolling to gradebook button...")
-                self.driver.execute_script("arguments[0].scrollIntoView(true);", gradebook_button)
-                time.sleep(2)  # Wait for scroll to complete
-                
-                # Try to click using JavaScript
-                logger.info("Attempting to click using JavaScript...")
-                self.driver.execute_script("arguments[0].click();", gradebook_button)
-                
-            except Exception as e:
-                logger.warning(f"Primary click method failed: {str(e)}")
-                # Try alternative methods
+            gradebook_found = False
+            max_attempts = 3
+            
+            for attempt in range(max_attempts):
                 try:
-                    logger.info("Trying to find by link text 'Gradebook'...")
-                    gradebook_button = WebDriverWait(self.driver, 20).until(
-                        EC.element_to_be_clickable((By.LINK_TEXT, "Gradebook"))
-                    )
-                    ActionChains(self.driver).move_to_element(gradebook_button).click().perform()
-                except Exception as e:
-                    logger.warning(f"Link text click failed: {str(e)}")
-                    logger.info("Trying final fallback with partial link text...")
-                    gradebook_button = WebDriverWait(self.driver, 20).until(
-                        EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, "grade"))
-                    )
-                    self.driver.execute_script("arguments[0].click();", gradebook_button)
-
+                    logger.info(f"Attempt {attempt + 1} to find gradebook button")
+                    
+                    # Try different locator strategies
+                    locator_strategies = [
+                        (By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'),
+                        (By.LINK_TEXT, "Gradebook"),
+                        (By.PARTIAL_LINK_TEXT, "grade"),
+                        (By.CSS_SELECTOR, "a[href*='grade']")
+                    ]
+                    
+                    for locator in locator_strategies:
+                        try:
+                            logger.info(f"Trying to find gradebook using {locator[0]}")
+                            gradebook_button = WebDriverWait(self.driver, 30).until(
+                                EC.element_to_be_clickable(locator)
+                            )
+                            
+                            # Try to scroll the button into view
+                            logger.info("Scrolling to gradebook button...")
+                            self.driver.execute_script("arguments[0].scrollIntoView(true);", gradebook_button)
+                            time.sleep(2)
+                            
+                            # Try multiple click methods
+                            click_methods = [
+                                lambda: gradebook_button.click(),
+                                lambda: self.driver.execute_script("arguments[0].click();", gradebook_button),
+                                lambda: ActionChains(self.driver).move_to_element(gradebook_button).click().perform()
+                            ]
+                            
+                            for click_method in click_methods:
+                                try:
+                                    click_method()
+                                    gradebook_found = True
+                                    break
+                                except Exception as click_error:
+                                    logger.warning(f"Click method failed: {str(click_error)}")
+                                    continue
+                            
+                            if gradebook_found:
+                                break
+                                
+                        except Exception as locator_error:
+                            logger.warning(f"Locator strategy failed: {str(locator_error)}")
+                            continue
+                    
+                    if gradebook_found:
+                        break
+                        
+                except Exception as attempt_error:
+                    logger.warning(f"Attempt {attempt + 1} failed: {str(attempt_error)}")
+                    if attempt < max_attempts - 1:
+                        logger.info("Refreshing page and trying again...")
+                        self.driver.refresh()
+                        time.sleep(5)
+                    continue
+            
+            if not gradebook_found:
+                raise Exception("Failed to find or click gradebook button after all attempts")
+            
             logger.info("Successfully triggered gradebook button click")
             
-            # Wait for URL to change
-            logger.info("Waiting for URL to update after clicking gradebook...")
-            time.sleep(3)
-            new_url = self.driver.current_url
-            logger.info(f"URL after clicking gradebook: {new_url}")
-
-            # Wait for gradebook to load
+            # Wait for gradebook to load with increased timeout
             logger.info("Waiting for gradebook to load...")
-            WebDriverWait(self.driver, 20).until(
-                EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'))
-            )
-            logger.info("Gradebook loaded successfully")
+            try:
+                WebDriverWait(self.driver, 45).until(
+                    EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'))
+                )
+                logger.info("Gradebook loaded successfully")
+            except Exception as timeout_error:
+                logger.error("Timeout waiting for gradebook to load")
+                # Take a screenshot before raising the error
+                self.driver.save_screenshot("gradebook_timeout.png")
+                raise
 
         except Exception as e:
             logger.error(f"Error in navigate_to_gradebook: {str(e)}")
