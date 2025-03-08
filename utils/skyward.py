@@ -306,17 +306,17 @@ class SkywardGPA:
                                 elif text:
                                     is_valid_class = False
                                     break
-                            except Exception as e:
-                                logger.error(f"Error processing grade cell {cell_index} for {class_name}: {str(e)}")
-                                continue
+                        except Exception as e:
+                            logger.error(f"Error processing grade cell {cell_index} for {class_name}: {str(e)}")
+                            continue
 
-                        if is_valid_class and class_grades:
-                            logger.info(f"Adding grades for {class_name}: {class_grades}")
-                            self.grades_raw[class_name] = class_grades
-                            filtered_grades = {period: grade for period, grade in class_grades.items() 
-                                            if 'C' not in period}
-                            if filtered_grades:
-                                self.grades[class_name] = filtered_grades
+                    if is_valid_class and class_grades:
+                        logger.info(f"Adding grades for {class_name}: {class_grades}")
+                        self.grades_raw[class_name] = class_grades
+                        filtered_grades = {period: grade for period, grade in class_grades.items() 
+                                        if 'C' not in period}
+                        if filtered_grades:
+                            self.grades[class_name] = filtered_grades
 
                 except Exception as e:
                     logger.error(f"Error processing class {class_index}: {str(e)}")
