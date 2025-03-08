@@ -39,26 +39,26 @@ class SkywardGPA:
         self.period_order = ['1U1', '1U2', 'NW1', '2U1', '2U2', 'NW2', 'EX1', 'SM1', 
                             '3U1', '3U2', 'NW3', '4U1', '4U2', 'NW4', 'EX2', 'SM2', 'YR']
         self.ordered_periods = []
-        
-        if not os.environ.get('DISPLAY'):
-            os.environ['DISPLAY'] = ':99'
-            logger.info("Set DISPLAY=:99")
 
     def calculate(self):
         try:
             logger.info("Setting up Chrome options...")
             options = webdriver.ChromeOptions()
             
-            # PythonAnywhere-specific configuration
-            options.add_argument('--headless=new')
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-gpu')
-            options.add_argument('--disable-extensions')
-            options.add_argument('--window-size=1920,1080')
-            options.add_argument('--proxy-server="direct://"')
-            options.add_argument('--proxy-bypass-list=*')
-            options.add_argument('--start-maximized')
+            if platform.system() == 'Linux':  # Render
+                chrome_binary = '/usr/bin/google-chrome'
+                logger.info(f"Using Chrome binary: {chrome_binary}")
+                options.binary_location = chrome_binary
+                
+                # Required arguments for running on Render
+                options.add_argument('--no-sandbox')
+                options.add_argument('--disable-dev-shm-usage')
+                options.add_argument('--disable-gpu')
+                options.add_argument('--headless=new')
+                options.add_argument('--disable-extensions')
+                options.add_argument('--window-size=1920,1080')
+            else:  # Local
+                options.add_argument('--headless=new')
             
             # Common options
             options.add_argument('--ignore-certificate-errors')
@@ -66,7 +66,6 @@ class SkywardGPA:
             
             logger.info("Initializing Chrome driver...")
             try:
-                # PythonAnywhere has Chrome and chromedriver pre-installed
                 self.driver = webdriver.Chrome(options=options)
                 logger.info("Chrome driver initialized successfully")
             except Exception as e:
