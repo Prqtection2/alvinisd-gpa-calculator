@@ -58,10 +58,11 @@ class SkywardGPA:
                 options.add_argument('--disable-extensions')
                 options.add_argument('--disable-software-rasterizer')
                 options.add_argument('--disable-features=VizDisplayCompositor')
-                options.add_argument('--window-size=800,600')  # Smaller window size
-                options.add_argument('--disable-javascript')  # Disable JS when possible
-                options.add_argument('--blink-settings=imagesEnabled=false')  # Disable images
-                options.add_argument('--memory-pressure-off')
+                options.add_argument('--window-size=1920,1080')  # Full size for better rendering
+                options.add_argument('--start-maximized')
+                options.add_argument('--force-device-scale-factor=1')
+                options.add_argument('--disable-web-security')  # Allow cross-origin requests
+                options.add_argument('--disable-features=IsolateOrigins,site-per-process')  # Better frame handling
             else:  # Local
                 options.add_argument('--headless=new')
             
@@ -72,8 +73,8 @@ class SkywardGPA:
             logger.info("Initializing Chrome driver...")
             try:
                 self.driver = webdriver.Chrome(options=options)
-                self.driver.set_page_load_timeout(30)  # Set page load timeout
-                self.driver.set_script_timeout(30)     # Set script timeout
+                self.driver.set_page_load_timeout(60)  # Increased timeout
+                self.driver.set_script_timeout(60)     # Increased timeout
                 logger.info("Chrome driver initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing Chrome driver: {str(e)}")
@@ -269,13 +270,12 @@ class SkywardGPA:
                     period_labels.append(label if label else '-')
                 except:
                     period_labels.append('-')
-            logger.info(f"Period labels: {period_labels}")
+            logger.info(f"Raw period labels found: {period_labels}")
 
-            # Filter to current periods
-            current_periods = ['4U1', '4U2', 'NW4', 'SM2']  # Current semester periods
+            # Get all valid periods
             self.ordered_periods = [period for period in self.period_order 
-                                  if period in period_labels and period in current_periods]
-            logger.info(f"Processing periods: {self.ordered_periods}")
+                                  if period in period_labels]
+            logger.info(f"Valid periods found: {self.ordered_periods}")
 
             # Get all grades table at once
             logger.info("Getting grades table...")
@@ -285,6 +285,7 @@ class SkywardGPA:
                 logger.info(f"Found {len(class_rows)} rows in grades table")
             except Exception as e:
                 logger.error(f"Failed to get grades table: {str(e)}")
+                save_screenshot_base64(self.driver, "grades_table_error")
                 raise
 
             # Get all class names at once
@@ -293,9 +294,10 @@ class SkywardGPA:
                 classes_container = self.driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody')
                 class_name_elements = classes_container.find_elements(By.CSS_SELECTOR, 'td div table tbody tr td span a')
                 class_names = [elem.text for elem in class_name_elements]
-                logger.info(f"Found {len(class_names)} class names")
+                logger.info(f"Found {len(class_names)} classes: {class_names}")
             except Exception as e:
                 logger.error(f"Failed to get class names: {str(e)}")
+                save_screenshot_base64(self.driver, "class_names_error")
                 raise
 
             # Process grades row by row
@@ -303,6 +305,7 @@ class SkywardGPA:
                 try:
                     logger.info(f"Processing {class_name} ({i}/{len(class_rows)})")
                     cells = class_row.find_elements(By.TAG_NAME, 'td')
+                    logger.info(f"Found {len(cells)} grade cells for {class_name}")
                     
                     class_grades = {}
                     for cell_index, cell in enumerate(cells):
@@ -311,19 +314,22 @@ class SkywardGPA:
                                 break
                             
                             text = cell.get_attribute('innerText')
+                            logger.info(f"Cell {cell_index} for {class_name}: {text}")
                             if text and text.replace('.', '').isnumeric():
                                 period = period_labels[cell_index]
-                                if period in current_periods:  # Only store current semester grades
-                                    class_grades[period] = float(text)
-                        except:
+                                class_grades[period] = float(text)
+                        except Exception as cell_error:
+                            logger.error(f"Error processing cell {cell_index} for {class_name}: {str(cell_error)}")
                             continue
 
                     if class_grades:
+                        logger.info(f"Grades found for {class_name}: {class_grades}")
                         self.grades_raw[class_name] = class_grades
                         filtered_grades = {period: grade for period, grade in class_grades.items() 
-                                        if period in current_periods}
+                                        if period in self.ordered_periods}
                         if filtered_grades:
                             self.grades[class_name] = filtered_grades
+                            logger.info(f"Filtered grades for {class_name}: {filtered_grades}")
                             
                 except Exception as e:
                     logger.error(f"Error processing row {i}: {str(e)}")
@@ -331,10 +337,13 @@ class SkywardGPA:
 
             logger.info("Grade extraction completed successfully")
             logger.info(f"Total classes processed: {len(self.grades)}")
+            logger.info(f"Final grades dictionary: {self.grades}")
+            logger.info(f"Final ordered periods: {self.ordered_periods}")
 
         except Exception as e:
             logger.error(f"Error in extract_grades: {str(e)}")
-            logger.error(traceback.format_exc())
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            save_screenshot_base64(self.driver, "extract_grades_error")
             raise
 
     def calculate_gpas(self):
