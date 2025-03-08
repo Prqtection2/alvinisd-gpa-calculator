@@ -156,53 +156,32 @@ class SkywardGPA:
             sign_in_button.click()
             logger.info("Credentials submitted")
 
-            # Wait for page transition
+            # Wait for new window or URL change
             try:
-                # First check for validation error
-                try:
-                    error_element = WebDriverWait(self.driver, 3).until(
-                        EC.presence_of_element_located((By.CLASS_NAME, "validation-error"))
+                logger.info("Waiting for login response...")
+                time.sleep(2)  # Brief pause for window creation
+                
+                # Check for multiple windows
+                if len(self.driver.window_handles) > 1:
+                    logger.info("New window detected, switching...")
+                    self.driver.switch_to.window(self.driver.window_handles[-1])
+                    success = True
+                else:
+                    # Wait for URL change
+                    WebDriverWait(self.driver, 10).until(
+                        lambda d: "sfhome01.w" in d.current_url
                     )
-                    raise Exception("Incorrect username or password")
-                except Exception as e:
-                    if "Incorrect username or password" in str(e):
-                        raise
-                
-                # If no error, wait for successful navigation
-                logger.info("Waiting for home page...")
-                success = False
-                max_attempts = 3
-                
-                for attempt in range(max_attempts):
-                    try:
-                        # Wait for URL change
-                        WebDriverWait(self.driver, 10).until(
-                            lambda d: "sfhome01.w" in d.current_url
-                        )
-                        success = True
-                        break
-                    except:
-                        # If URL wait fails, check for new window
-                        try:
-                            if len(self.driver.window_handles) > 1:
-                                self.driver.switch_to.window(self.driver.window_handles[-1])
-                                success = True
-                                break
-                        except:
-                            if attempt < max_attempts - 1:
-                                logger.info(f"Login attempt {attempt + 1} failed, retrying...")
-                                time.sleep(2)
-                                continue
+                    success = True
                 
                 if success:
                     logger.info("Successfully logged in")
+                    time.sleep(2)  # Wait for page to stabilize
+                    save_screenshot_base64(self.driver, "login_success")
                     return
                 else:
                     raise Exception("Failed to verify successful login")
 
             except Exception as e:
-                if "Incorrect username or password" in str(e):
-                    raise
                 logger.error(f"Login verification failed: {str(e)}")
                 save_screenshot_base64(self.driver, "login_error")
                 raise Exception("Login failed. Please try again in a few minutes.")
@@ -215,121 +194,49 @@ class SkywardGPA:
     def navigate_to_gradebook(self):
         try:
             logger.info("Navigating to gradebook...")
-            
-            # Wait for page to be fully loaded
-            time.sleep(2)
+            time.sleep(2)  # Wait for page to stabilize
             
             # Take screenshot to debug
             save_screenshot_base64(self.driver, "before_navigation")
             
-            # Try multiple navigation methods
-            max_attempts = 3
-            success = False
+            # Click the plus button using exact XPath
+            logger.info("Looking for plus button...")
+            plus_xpath = '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[1]/li/a'
             
-            for attempt in range(max_attempts):
-                try:
-                    logger.info(f"Navigation attempt {attempt + 1}")
-                    
-                    # First try: Direct XPath to gradebook
-                    try:
-                        gradebook_xpath = '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'
-                        gradebook_button = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, gradebook_xpath))
-                        )
-                        gradebook_button.click()
-                        success = True
-                        logger.info("Clicked gradebook using direct xpath")
-                        break
-                    except Exception as e:
-                        logger.info(f"Direct xpath failed: {str(e)}")
-                    
-                    # Second try: Click plus button first
-                    try:
-                        plus_xpath = '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[1]/li/a'
-                        plus_button = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, plus_xpath))
-                        )
-                        plus_button.click()
-                        logger.info("Clicked plus button")
-                        
-                        # Wait for menu animation
-                        time.sleep(1)
-                        
-                        # Try clicking gradebook again
-                        gradebook_button = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, gradebook_xpath))
-                        )
-                        gradebook_button.click()
-                        success = True
-                        logger.info("Clicked gradebook after expanding menu")
-                        break
-                    except Exception as e:
-                        logger.info(f"Plus button method failed: {str(e)}")
-                    
-                    # Third try: JavaScript click
-                    try:
-                        logger.info("Attempting JavaScript click")
-                        self.driver.execute_script("""
-                            var elements = document.querySelectorAll('a');
-                            for(var i=0; i<elements.length; i++) {
-                                if(elements[i].textContent.includes('Gradebook')) {
-                                    elements[i].click();
-                                    return true;
-                                }
-                            }
-                            return false;
-                        """)
-                        time.sleep(2)
-                        success = True
-                        logger.info("Clicked gradebook using JavaScript")
-                        break
-                    except Exception as e:
-                        logger.info(f"JavaScript click failed: {str(e)}")
-                    
-                    if attempt < max_attempts - 1:
-                        logger.info("Refreshing page and waiting before next attempt")
-                        self.driver.refresh()
-                        time.sleep(3)
-                        
-                except Exception as attempt_error:
-                    logger.error(f"Attempt {attempt + 1} failed: {str(attempt_error)}")
-                    if attempt < max_attempts - 1:
-                        continue
-            
-            if not success:
-                save_screenshot_base64(self.driver, "navigation_failed")
-                raise Exception("Failed to navigate to gradebook after all attempts")
-            
-            # Wait for gradebook to load
-            logger.info("Waiting for gradebook to load...")
             try:
-                # Try multiple selectors for the gradebook table
-                table_found = False
-                for selector in [
-                    "table.gridTable",
-                    "//table[contains(@class, 'gridTable')]",
-                    '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table'
-                ]:
-                    try:
-                        WebDriverWait(self.driver, 20).until(
-                            EC.presence_of_element_located(
-                                (By.CSS_SELECTOR if 'table.' in selector else By.XPATH, selector)
-                            )
-                        )
-                        table_found = True
-                        break
-                    except:
-                        continue
+                # Wait and click plus button
+                plus_button = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, plus_xpath))
+                )
+                logger.info("Found plus button, clicking...")
+                plus_button.click()
+                time.sleep(1.5)  # Wait longer for menu animation
                 
-                if not table_found:
-                    raise Exception("Gradebook table not found")
+                # Click gradebook using exact XPath
+                logger.info("Looking for gradebook link...")
+                gradebook_xpath = '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'
+                gradebook_button = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, gradebook_xpath))
+                )
+                logger.info("Found gradebook link, clicking...")
+                gradebook_button.click()
+                time.sleep(1)  # Wait for click to register
                 
+                # Wait for gradebook table to load
+                logger.info("Waiting for gradebook to load...")
+                table_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table'
+                WebDriverWait(self.driver, 20).until(
+                    EC.presence_of_element_located((By.XPATH, table_xpath))
+                )
+                
+                # Additional wait for table to be fully loaded
+                time.sleep(2)
                 logger.info("Gradebook loaded successfully")
                 save_screenshot_base64(self.driver, "gradebook_loaded")
                 
-            except Exception as table_error:
-                logger.error(f"Error waiting for gradebook table: {str(table_error)}")
-                save_screenshot_base64(self.driver, "gradebook_load_failed")
+            except Exception as e:
+                logger.error(f"Navigation failed: {str(e)}")
+                save_screenshot_base64(self.driver, "navigation_error")
                 raise
 
         except Exception as e:
