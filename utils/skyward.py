@@ -132,144 +132,82 @@ class SkywardGPA:
             login_url = "https://skyward-alvinprod.iscorp.com/scripts/wsisa.dll/WService=wsedualvinisdtx/fwemnu01.w"
             self.driver.get(login_url)
             
-            current_url = self.driver.current_url
-            logger.info(f"Current URL before login: {current_url}")
-            if "fwemnu01.w" not in current_url:
-                logger.error(f"Unexpected URL before login: {current_url}")
-                self.driver.get(login_url)
-                time.sleep(2)
-            
-            logger.info("Waiting for username input...")
+            # Wait for username input and login form
+            logger.info("Waiting for login form...")
             username_input = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[1]/td[2]/input'))
+                EC.presence_of_element_located((By.NAME, "login"))
             )
+            
+            # Fill credentials and submit in one go
             username_input.send_keys(self.username)
-            logger.info("Username entered successfully")
+            password_input = self.driver.find_element(By.NAME, "password")
+            password_input.send_keys(self.password + Keys.RETURN)  # Using RETURN key instead of finding button
+            logger.info("Credentials submitted")
 
-            password_input = self.driver.find_element(By.XPATH, '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[2]/td[2]/input')
-            password_input.send_keys(self.password)
-
-            sign_in_button = self.driver.find_element(By.XPATH, '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[7]/td/a')
-            sign_in_button.click()
-
+            # Wait for either error message or successful navigation
             try:
-                WebDriverWait(self.driver, 10).until(lambda d: len(d.window_handles) > 1)
-                logger.info("New window detected after login")
-            except:
-                try:
-                    error_element = WebDriverWait(self.driver, 3).until(
-                        EC.presence_of_element_located((By.CLASS_NAME, 'validation-error'))
-                    )
-                    raise Exception("Incorrect username or password. Please check your credentials and try again.")
-                except:
-                    current_url = self.driver.current_url
-                    logger.info(f"Current URL after login attempt: {current_url}")
-                    if "sfhome01.w" in current_url:
-                        logger.info("Successfully redirected to home page")
-                    else:
-                        raise Exception("Login failed. Please double-check your password and try again. If you're sure your password is correct, try again in a few minutes.")
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: "sfhome01.w" in d.current_url or 
+                    len(d.find_elements(By.CLASS_NAME, 'validation-error')) > 0
+                )
+                
+                if "sfhome01.w" in self.driver.current_url:
+                    logger.info("Successfully logged in")
+                    return
+                else:
+                    raise Exception("Incorrect username or password")
+                    
+            except Exception as e:
+                if "Incorrect username or password" in str(e):
+                    raise
+                raise Exception("Login failed. Please try again in a few minutes.")
 
         except Exception as e:
-            if "Incorrect username or password" in str(e) or "Login failed" in str(e):
-                raise e
-            raise Exception("Login failed. Please double-check your password and try again. If you're sure your password is correct, try again in a few minutes.")
+            logger.error(f"Login error: {str(e)}")
+            raise
 
     def navigate_to_gradebook(self):
         try:
-            logger.info("Checking current URL before navigation...")
-            current_url = self.driver.current_url
-            logger.info(f"Current URL: {current_url}")
+            logger.info("Navigating to gradebook...")
             
-            if len(self.driver.window_handles) > 1:
-                logger.info("Multiple windows detected, switching to new window...")
-                self.driver.switch_to.window(self.driver.window_handles[1])
-                logger.info("Successfully switched to new window")
-            else:
-                logger.info("Single window detected, continuing in current window")
-            
-            logger.info("Looking for gradebook button...")
-            gradebook_found = False
-            max_attempts = 2
-            
-            for attempt in range(max_attempts):
-                try:
-                    logger.info(f"Attempt {attempt + 1} to find gradebook button")
-                    
-                    # First try direct access to gradebook (expanded menu)
-                    try:
-                        logger.info("Trying expanded menu layout...")
-                        gradebook_button = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'))
-                        )
-                        gradebook_button.click()
-                        gradebook_found = True
-                        logger.info("Found and clicked gradebook in expanded menu")
-                        break
-                    except Exception as e:
-                        logger.info(f"Expanded menu attempt failed: {str(e)}")
-                        
-                    # If direct access fails, try the collapsed menu approach
-                    try:
-                        logger.info("Trying collapsed menu layout...")
-                        # Click the + button first
-                        plus_button = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[1]/li/a'))
-                        )
-                        plus_button.click()
-                        logger.info("Clicked + button successfully")
-                        
-                        # Wait a moment for the menu to expand
-                        time.sleep(1)
-                        
-                        # Now try to click the gradebook button
-                        gradebook_button = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'))
-                        )
-                        gradebook_button.click()
-                        gradebook_found = True
-                        logger.info("Found and clicked gradebook in collapsed menu")
-                        break
-                    except Exception as e:
-                        logger.info(f"Collapsed menu attempt failed: {str(e)}")
-                        
-                    # If both methods fail, try link text as last resort
-                    try:
-                        logger.info("Trying link text method...")
-                        gradebook_button = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.LINK_TEXT, "Gradebook"))
-                        )
-                        gradebook_button.click()
-                        gradebook_found = True
-                        logger.info("Found and clicked gradebook using link text")
-                        break
-                    except Exception as e:
-                        logger.info(f"Link text attempt failed: {str(e)}")
-                        
-                except Exception as attempt_error:
-                    logger.warning(f"Attempt {attempt + 1} failed: {str(attempt_error)}")
-                    if attempt < max_attempts - 1:
-                        self.driver.refresh()
-                        time.sleep(2)
-                    continue
-            
-            if not gradebook_found:
-                raise Exception("Failed to find or click gradebook button after all attempts")
-            
-            logger.info("Successfully triggered gradebook button click")
-            
-            logger.info("Waiting for gradebook to load...")
+            # Try direct navigation first
             try:
-                WebDriverWait(self.driver, 30).until(
-                    EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'))
+                gradebook_button = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "a[data-caption='Gradebook']"))
                 )
-                logger.info("Gradebook loaded successfully")
-            except Exception as timeout_error:
-                logger.error("Timeout waiting for gradebook to load")
-                raise
+                gradebook_button.click()
+                logger.info("Clicked gradebook directly")
+            except:
+                # If direct navigation fails, try expanding menu first
+                try:
+                    logger.info("Expanding menu...")
+                    plus_button = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.sf-menu > li > a"))
+                    )
+                    plus_button.click()
+                    
+                    # Wait briefly for animation
+                    time.sleep(0.5)
+                    
+                    # Click gradebook in expanded menu
+                    gradebook_button = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "a[data-caption='Gradebook']"))
+                    )
+                    gradebook_button.click()
+                    logger.info("Clicked gradebook through menu")
+                except Exception as e:
+                    logger.error(f"Failed to navigate via menu: {str(e)}")
+                    raise
+            
+            # Wait for gradebook to load
+            logger.info("Waiting for gradebook to load...")
+            WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "table.gridTable"))
+            )
+            logger.info("Gradebook loaded successfully")
 
         except Exception as e:
-            logger.error(f"Error in navigate_to_gradebook: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Navigation error: {str(e)}")
             raise
 
     def extract_grades(self):
@@ -279,7 +217,9 @@ class SkywardGPA:
             
             # Get all period headers at once
             grading_periods_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'
-            grading_periods = self.driver.find_elements(By.XPATH, grading_periods_xpath)
+            grading_periods = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_all_elements_located((By.XPATH, grading_periods_xpath))
+            )
             logger.info(f"Found {len(grading_periods)} grading periods")
     
             # Get period labels
@@ -297,34 +237,49 @@ class SkywardGPA:
                                   if period in period_labels]
             logger.info(f"Valid periods found: {self.ordered_periods}")
 
-            # Get all grades table at once
+            # Wait for grades table and ensure it's loaded
             logger.info("Getting grades table...")
-            try:
-                grades_table = self.driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody')
-                class_rows = grades_table.find_elements(By.TAG_NAME, 'tr')
-                logger.info(f"Found {len(class_rows)} rows in grades table")
-            except Exception as e:
-                logger.error(f"Failed to get grades table: {str(e)}")
-                save_screenshot_base64(self.driver, "grades_table_error")
-                raise
-
-            # Get all class names at once
+            grades_table_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[2]/table/tbody'
+            grades_table = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.XPATH, grades_table_xpath))
+            )
+            
+            # Wait for class names container and get class names
             logger.info("Getting class names...")
-            try:
-                classes_container = self.driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody')
-                class_name_elements = classes_container.find_elements(By.CSS_SELECTOR, 'td div table tbody tr td span a')
-                class_names = [elem.text for elem in class_name_elements]
-                logger.info(f"Found {len(class_names)} classes: {class_names}")
-            except Exception as e:
-                logger.error(f"Failed to get class names: {str(e)}")
-                save_screenshot_base64(self.driver, "class_names_error")
-                raise
+            classes_xpath = '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[2]/div[2]/table/tbody'
+            classes_container = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.XPATH, classes_xpath))
+            )
+            
+            # Scroll the container into view and wait
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", classes_container)
+            time.sleep(2)  # Allow time for any dynamic content to load
+            
+            class_name_elements = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'td div table tbody tr td span a'))
+            )
+            class_names = [elem.text for elem in class_name_elements]
+            logger.info(f"Found {len(class_names)} classes: {class_names}")
 
-            # Process grades row by row
+            # Get all rows and ensure they're loaded
+            class_rows = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, f"{grades_table_xpath} tr"))
+            )
+            logger.info(f"Found {len(class_rows)} rows in grades table")
+
+            # Process grades row by row with explicit waits
             for i, (class_row, class_name) in enumerate(zip(class_rows, class_names), 1):
                 try:
                     logger.info(f"Processing {class_name} ({i}/{len(class_rows)})")
-                    cells = class_row.find_elements(By.TAG_NAME, 'td')
+                    
+                    # Scroll the row into view
+                    self.driver.execute_script("arguments[0].scrollIntoView(true);", class_row)
+                    time.sleep(0.5)  # Short wait after scrolling
+                    
+                    # Get cells with wait
+                    cells = WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_all_elements_located((By.TAG_NAME, 'td'))
+                    )
                     logger.info(f"Found {len(cells)} grade cells for {class_name}")
                     
                     class_grades = {}
@@ -332,6 +287,11 @@ class SkywardGPA:
                         try:
                             if cell_index >= len(period_labels):
                                 break
+                            
+                            # Wait for cell to be visible
+                            WebDriverWait(self.driver, 5).until(
+                                EC.visibility_of(cell)
+                            )
                             
                             text = cell.get_attribute('innerText')
                             logger.info(f"Cell {cell_index} for {class_name}: {text}")
@@ -350,15 +310,22 @@ class SkywardGPA:
                         if filtered_grades:
                             self.grades[class_name] = filtered_grades
                             logger.info(f"Filtered grades for {class_name}: {filtered_grades}")
+                    
+                    # Take a screenshot after processing each class
+                    save_screenshot_base64(self.driver, f"class_{i}_{class_name.replace(' ', '_')}")
                             
                 except Exception as e:
                     logger.error(f"Error processing row {i}: {str(e)}")
+                    save_screenshot_base64(self.driver, f"error_class_{i}")
                     continue
 
             logger.info("Grade extraction completed successfully")
             logger.info(f"Total classes processed: {len(self.grades)}")
             logger.info(f"Final grades dictionary: {self.grades}")
             logger.info(f"Final ordered periods: {self.ordered_periods}")
+
+            # Take a final screenshot
+            save_screenshot_base64(self.driver, "final_grades_state")
 
         except Exception as e:
             logger.error(f"Error in extract_grades: {str(e)}")
