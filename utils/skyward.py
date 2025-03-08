@@ -105,7 +105,16 @@ class SkywardGPA:
     def login(self):
         try:
             logger.info("Attempting to access login page...")
-            self.driver.get("https://skyward-alvinprod.iscorp.com/scripts/wsisa.dll/WService=wsedualvinisdtx/fwemnu01.w")
+            login_url = "https://skyward-alvinprod.iscorp.com/scripts/wsisa.dll/WService=wsedualvinisdtx/fwemnu01.w"
+            self.driver.get(login_url)
+            
+            # Check if we're on the correct page
+            current_url = self.driver.current_url
+            logger.info(f"Current URL before login: {current_url}")
+            if "fwemnu01.w" not in current_url:
+                logger.error(f"Unexpected URL before login: {current_url}")
+                self.driver.get(login_url)  # Try to load the login page again
+                time.sleep(2)  # Wait for page to load
             
             logger.info("Waiting for username input...")
             username_input = WebDriverWait(self.driver, 10).until(
@@ -125,6 +134,7 @@ class SkywardGPA:
             # Wait for new window to appear or error message
             try:
                 WebDriverWait(self.driver, 10).until(lambda d: len(d.window_handles) > 1)
+                logger.info("New window detected after login")
             except:
                 # Check for error message
                 try:
@@ -133,7 +143,13 @@ class SkywardGPA:
                     )
                     raise Exception("Incorrect username or password. Please check your credentials and try again.")
                 except:
-                    raise Exception("Login failed. Please double-check your password and try again. If you're sure your password is correct, try again in a few minutes.")
+                    # Check if we're redirected to home page
+                    current_url = self.driver.current_url
+                    logger.info(f"Current URL after login attempt: {current_url}")
+                    if "sfhome01.w" in current_url:
+                        logger.info("Successfully redirected to home page")
+                    else:
+                        raise Exception("Login failed. Please double-check your password and try again. If you're sure your password is correct, try again in a few minutes.")
 
         except Exception as e:
             if "Incorrect username or password" in str(e) or "Login failed" in str(e):
@@ -142,14 +158,16 @@ class SkywardGPA:
 
     def navigate_to_gradebook(self):
         try:
-            logger.info("Attempting to switch to new window...")
-            # Wait for new window and switch to it
-            WebDriverWait(self.driver, 20).until(lambda d: len(d.window_handles) > 1)
-            self.driver.switch_to.window(self.driver.window_handles[1])
-            logger.info("Successfully switched to new window")
-
-            # Log the current URL
-            logger.info(f"Current URL: {self.driver.current_url}")
+            logger.info("Checking current URL before navigation...")
+            current_url = self.driver.current_url
+            logger.info(f"Current URL: {current_url}")
+            
+            if len(self.driver.window_handles) > 1:
+                logger.info("Multiple windows detected, switching to new window...")
+                self.driver.switch_to.window(self.driver.window_handles[1])
+                logger.info("Successfully switched to new window")
+            else:
+                logger.info("Single window detected, continuing in current window")
             
             # Wait for page to load
             logger.info("Waiting for page to load...")
@@ -195,6 +213,12 @@ class SkywardGPA:
                     self.driver.execute_script("arguments[0].click();", gradebook_button)
 
             logger.info("Successfully triggered gradebook button click")
+            
+            # Wait for URL to change
+            logger.info("Waiting for URL to update after clicking gradebook...")
+            time.sleep(3)
+            new_url = self.driver.current_url
+            logger.info(f"URL after clicking gradebook: {new_url}")
 
             # Wait for gradebook to load
             logger.info("Waiting for gradebook to load...")
