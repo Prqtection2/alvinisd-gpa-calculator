@@ -15,7 +15,7 @@ services:
       
       # Install Python dependencies
       pip install -r requirements.txt
-    startCommand: gunicorn app:app --timeout 120 --workers 1 --threads 2
+    startCommand: gunicorn app:app --timeout 120 --workers 1 --threads 2 --max-requests 5 --max-requests-jitter 2
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
@@ -24,4 +24,9 @@ services:
       - key: CHROME_BIN
         value: /usr/bin/google-chrome
       - key: CHROME_PATH
-        value: /usr/bin/google-chrome 
+        value: /usr/bin/google-chrome
+    scaling:
+      minInstances: 1
+      maxInstances: 1
+      targetMemoryPercent: 80
+      targetCPUPercent: 70 

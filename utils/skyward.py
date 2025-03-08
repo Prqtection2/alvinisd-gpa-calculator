@@ -50,13 +50,18 @@ class SkywardGPA:
                 logger.info(f"Using Chrome binary: {chrome_binary}")
                 options.binary_location = chrome_binary
                 
-                # Required arguments for running on Render
+                # Memory optimization arguments
                 options.add_argument('--no-sandbox')
                 options.add_argument('--disable-dev-shm-usage')
                 options.add_argument('--disable-gpu')
                 options.add_argument('--headless=new')
                 options.add_argument('--disable-extensions')
-                options.add_argument('--window-size=1920,1080')
+                options.add_argument('--disable-software-rasterizer')
+                options.add_argument('--disable-features=VizDisplayCompositor')
+                options.add_argument('--window-size=800,600')  # Smaller window size
+                options.add_argument('--disable-javascript')  # Disable JS when possible
+                options.add_argument('--blink-settings=imagesEnabled=false')  # Disable images
+                options.add_argument('--memory-pressure-off')
             else:  # Local
                 options.add_argument('--headless=new')
             
@@ -67,6 +72,8 @@ class SkywardGPA:
             logger.info("Initializing Chrome driver...")
             try:
                 self.driver = webdriver.Chrome(options=options)
+                self.driver.set_page_load_timeout(30)  # Set page load timeout
+                self.driver.set_script_timeout(30)     # Set script timeout
                 logger.info("Chrome driver initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing Chrome driver: {str(e)}")
@@ -152,101 +159,48 @@ class SkywardGPA:
             current_url = self.driver.current_url
             logger.info(f"Current URL: {current_url}")
             
-            save_screenshot_base64(self.driver, "before_navigation")
-            
             if len(self.driver.window_handles) > 1:
                 logger.info("Multiple windows detected, switching to new window...")
                 self.driver.switch_to.window(self.driver.window_handles[1])
                 logger.info("Successfully switched to new window")
-                save_screenshot_base64(self.driver, "after_window_switch")
             else:
                 logger.info("Single window detected, continuing in current window")
             
-            logger.info("Waiting for page to load...")
-            time.sleep(5)
-            
-            page_source = self.driver.page_source
-            logger.info("Page source length: " + str(len(page_source)))
-            
-            links = self.driver.find_elements(By.TAG_NAME, "a")
-            logger.info("Found links on page:")
-            for link in links:
-                try:
-                    href = link.get_attribute("href")
-                    text = link.text
-                    logger.info(f"Link text: '{text}', href: '{href}'")
-                except:
-                    continue
-            
-            logger.info("Verifying page loaded correctly...")
-            try:
-                nav_elements = self.driver.find_elements(By.TAG_NAME, "a")
-                logger.info(f"Found {len(nav_elements)} navigation elements")
-                if len(nav_elements) == 0:
-                    raise Exception("No navigation elements found")
-            except Exception as e:
-                logger.error(f"Error finding navigation elements: {str(e)}")
-                logger.info("Attempting page refresh...")
-                self.driver.refresh()
-                time.sleep(5)
-            
             logger.info("Looking for gradebook button...")
             gradebook_found = False
-            max_attempts = 3
+            max_attempts = 2  # Reduced attempts
             
             for attempt in range(max_attempts):
                 try:
                     logger.info(f"Attempt {attempt + 1} to find gradebook button")
                     
-                    locator_strategies = [
-                        (By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'),
-                        (By.LINK_TEXT, "Gradebook"),
-                        (By.PARTIAL_LINK_TEXT, "grade"),
-                        (By.CSS_SELECTOR, "a[href*='grade']")
-                    ]
-                    
-                    for locator in locator_strategies:
-                        try:
-                            logger.info(f"Trying to find gradebook using {locator[0]}")
-                            gradebook_button = WebDriverWait(self.driver, 30).until(
-                                EC.element_to_be_clickable(locator)
-                            )
-                            
-                            logger.info("Scrolling to gradebook button...")
-                            self.driver.execute_script("arguments[0].scrollIntoView(true);", gradebook_button)
-                            time.sleep(2)
-                            
-                            click_methods = [
-                                lambda: gradebook_button.click(),
-                                lambda: self.driver.execute_script("arguments[0].click();", gradebook_button),
-                                lambda: ActionChains(self.driver).move_to_element(gradebook_button).click().perform()
-                            ]
-                            
-                            for click_method in click_methods:
-                                try:
-                                    click_method()
-                                    gradebook_found = True
-                                    break
-                                except Exception as click_error:
-                                    logger.warning(f"Click method failed: {str(click_error)}")
-                                    continue
-                            
-                            if gradebook_found:
-                                break
-                                
-                        except Exception as locator_error:
-                            logger.warning(f"Locator strategy failed: {str(locator_error)}")
-                            continue
-                    
-                    if gradebook_found:
+                    # Try direct XPath first
+                    try:
+                        gradebook_button = WebDriverWait(self.driver, 15).until(
+                            EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[1]/div/ul[2]/li[3]/a'))
+                        )
+                        gradebook_button.click()
+                        gradebook_found = True
                         break
+                    except:
+                        logger.warning("Direct XPath failed, trying alternative methods")
+                    
+                    # Try link text as fallback
+                    try:
+                        gradebook_button = WebDriverWait(self.driver, 15).until(
+                            EC.element_to_be_clickable((By.LINK_TEXT, "Gradebook"))
+                        )
+                        gradebook_button.click()
+                        gradebook_found = True
+                        break
+                    except:
+                        logger.warning("Link text method failed")
                         
                 except Exception as attempt_error:
                     logger.warning(f"Attempt {attempt + 1} failed: {str(attempt_error)}")
                     if attempt < max_attempts - 1:
-                        logger.info("Refreshing page and trying again...")
                         self.driver.refresh()
-                        time.sleep(5)
+                        time.sleep(2)
                     continue
             
             if not gradebook_found:
@@ -256,24 +210,17 @@ class SkywardGPA:
             
             logger.info("Waiting for gradebook to load...")
             try:
-                WebDriverWait(self.driver, 45).until(
+                WebDriverWait(self.driver, 30).until(  # Reduced timeout
                     EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div[2]/div[2]/div[2]/div/div[4]/div[4]/div[2]/div[1]/div/div[1]/div[1]/table/thead/tr/th'))
                 )
                 logger.info("Gradebook loaded successfully")
             except Exception as timeout_error:
                 logger.error("Timeout waiting for gradebook to load")
-                self.driver.save_screenshot("gradebook_timeout.png")
                 raise
 
         except Exception as e:
             logger.error(f"Error in navigate_to_gradebook: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
-            try:
-                screenshot_path = "error_screenshot.png"
-                self.driver.save_screenshot(screenshot_path)
-                logger.info(f"Screenshot saved to {screenshot_path}")
-            except Exception as screenshot_error:
-                logger.error(f"Failed to take screenshot: {str(screenshot_error)}")
             raise
 
     def extract_grades(self):
