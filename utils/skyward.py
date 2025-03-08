@@ -132,28 +132,31 @@ class SkywardGPA:
             login_url = "https://skyward-alvinprod.iscorp.com/scripts/wsisa.dll/WService=wsedualvinisdtx/fwemnu01.w"
             self.driver.get(login_url)
             
-            # Wait for username input and login form with longer timeout
+            # Wait for username input with direct XPath
             logger.info("Waiting for login form...")
+            username_xpath = '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[1]/td[2]/input'
             username_input = WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, "//input[@id='login']"))
+                EC.presence_of_element_located((By.XPATH, username_xpath))
             )
             
-            # Fill credentials and submit
-            username_input.clear()  # Clear any existing text
+            # Fill credentials using direct XPaths
+            username_input.clear()
             username_input.send_keys(self.username)
-            time.sleep(0.5)  # Brief pause
+            time.sleep(0.5)
             
-            password_input = self.driver.find_element(By.XPATH, "//input[@id='password']")
-            password_input.clear()  # Clear any existing text
+            password_xpath = '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[2]/td[2]/input'
+            password_input = self.driver.find_element(By.XPATH, password_xpath)
+            password_input.clear()
             password_input.send_keys(self.password)
-            time.sleep(0.5)  # Brief pause
+            time.sleep(0.5)
             
-            # Click the sign in button instead of using RETURN key
-            sign_in_button = self.driver.find_element(By.XPATH, "//a[contains(@onclick, 'loginSubmit')]")
+            # Click sign in button with direct XPath
+            sign_in_xpath = '/html/body/form[1]/div/div/div[4]/div[2]/div[1]/div[2]/div/table/tbody/tr[7]/td/a'
+            sign_in_button = self.driver.find_element(By.XPATH, sign_in_xpath)
             sign_in_button.click()
             logger.info("Credentials submitted")
 
-            # Wait for page transition with longer timeout
+            # Wait for page transition
             try:
                 # First check for validation error
                 try:
@@ -174,18 +177,17 @@ class SkywardGPA:
                     try:
                         # Wait for URL change
                         WebDriverWait(self.driver, 10).until(
-                            lambda d: "sfhome01.w" in d.current_url or "Home.aspx" in d.current_url
+                            lambda d: "sfhome01.w" in d.current_url
                         )
                         success = True
                         break
                     except:
-                        # If URL wait fails, check for gradebook link
+                        # If URL wait fails, check for new window
                         try:
-                            WebDriverWait(self.driver, 5).until(
-                                EC.presence_of_element_located((By.CSS_SELECTOR, "a[data-caption='Gradebook']"))
-                            )
-                            success = True
-                            break
+                            if len(self.driver.window_handles) > 1:
+                                self.driver.switch_to.window(self.driver.window_handles[-1])
+                                success = True
+                                break
                         except:
                             if attempt < max_attempts - 1:
                                 logger.info(f"Login attempt {attempt + 1} failed, retrying...")
