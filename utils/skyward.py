@@ -78,33 +78,53 @@ class SkywardGPA:
                 logger.info("Chrome driver initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing Chrome driver: {str(e)}")
-                raise
+                return self._create_error_response("Failed to initialize Chrome driver")
 
-            self.login()
-            save_screenshot_base64(self.driver, "after_login")
-            self.navigate_to_gradebook()
-            self.extract_grades()
-            self.calculate_gpas()
-            
-            return {
-                'grades_raw': self.grades_raw,
-                'grades': self.grades,
-                'unweighted_gpas': self.period_gpas,
-                'weighted_gpas': self.weighted_period_gpas,
-                'ordered_periods': self.ordered_periods
-            }
-        except Exception as e:
-            logger.error(f"Error in calculate: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            if self.driver:
-                save_screenshot_base64(self.driver, "error_state")
-            raise
+            try:
+                self.login()
+                save_screenshot_base64(self.driver, "after_login")
+                self.navigate_to_gradebook()
+                self.extract_grades()
+                self.calculate_gpas()
+                
+                # Ensure we have valid data
+                if not self.grades or not self.ordered_periods:
+                    logger.warning("No grades found, but no errors occurred")
+                    return self._create_error_response("No grades found in Skyward")
+                
+                return {
+                    'success': True,
+                    'error': None,
+                    'grades_raw': self.grades_raw,
+                    'grades': self.grades,
+                    'unweighted_gpas': self.period_gpas,
+                    'weighted_gpas': self.weighted_period_gpas,
+                    'ordered_periods': self.ordered_periods
+                }
+            except Exception as e:
+                logger.error(f"Error during grade calculation: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                if self.driver:
+                    save_screenshot_base64(self.driver, "error_state")
+                return self._create_error_response(str(e))
         finally:
             if self.driver:
                 try:
                     self.driver.quit()
                 except Exception as e:
                     logger.error(f"Error closing driver: {str(e)}")
+
+    def _create_error_response(self, error_message):
+        """Helper method to create a standardized error response"""
+        return {
+            'success': False,
+            'error': error_message,
+            'grades_raw': {},
+            'grades': {},
+            'unweighted_gpas': {},
+            'weighted_gpas': {},
+            'ordered_periods': []
+        }
 
     def login(self):
         try:
