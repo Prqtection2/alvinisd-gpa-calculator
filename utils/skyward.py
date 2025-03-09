@@ -30,34 +30,27 @@ class SkywardGPA:
         self.period_order = ['1U1', '1U2', 'NW1', '2U1', '2U2', 'NW2', 'EX1', 'SM1', 
                             '3U1', '3U2', 'NW3', '4U1', '4U2', 'NW4', 'EX2', 'SM2', 'YR']
         self.ordered_periods = []
-        
-        # Only start Xvfb on Linux (Render)
-        if platform.system() == 'Linux' and not os.environ.get('DISPLAY'):
-            subprocess.Popen(['Xvfb', ':99', '-screen', '0', '1024x768x24'])
-            os.environ['DISPLAY'] = ':99'
 
     def calculate(self):
         try:
             logger.info("Setting up Chrome options...")
             options = webdriver.ChromeOptions()
             
-            # Set up options based on environment
-            if platform.system() == 'Linux':  # Render
-                options.add_argument('--headless=new')
-                options.add_argument('--no-sandbox')
-                options.add_argument('--disable-dev-shm-usage')
-            else:  # Local
-                options.add_argument('--headless=new')  # Still use headless for testing
-            
-            # Common options
+            # Docker-specific Chrome options
+            options.add_argument('--headless=new')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
             options.add_argument('--disable-gpu')
             options.add_argument('--window-size=1920,1080')
             options.add_argument('--start-maximized')
             options.add_argument('--ignore-certificate-errors')
+            options.add_argument('--disable-extensions')
+            options.add_argument('--remote-debugging-port=9222')
             options.add_experimental_option('excludeSwitches', ['enable-logging'])
             
             logger.info("Initializing Chrome driver...")
-            # Always use ChromeDriverManager for consistent behavior
+            # Use direct path to Chrome in Docker
+            options.binary_location = '/usr/bin/google-chrome'
             service = ChromeService(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=options)
             logger.info("Chrome driver initialized successfully")
